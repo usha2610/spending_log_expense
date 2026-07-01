@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Expense Tracker</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #f3f2f7;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .app-header {
+      background-color: #5f259f;
+      color: white;
+      padding: 1rem;
+      border-radius: 0 0 20px 20px;
+    }
+    .balance-card, .form-card, .history-card, .chart-card {
+      border-radius: 16px;
+      margin-bottom: 1rem;
+    }
+    .icon {
+      font-size: 1.2rem;
+      margin-right: 8px;
+    }
+    .income { border-left: 4px solid #28a745; }
+    .expense { border-left: 4px solid #dc3545; }
+    .send-btn, .receive-btn {
+      border-radius: 50px;
+      padding: 10px 20px;
+      font-weight: 500;
+    }
+    .bi-send-fill, .bi-cash-stack {
+      margin-right: 8px;
+    }
+    .chart-card {
+      padding: 0.5rem !important;
+    }
+    #chart {
+      max-height: 150px;
+      width: 100% !important;
+    }
+    #ai-widget input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-3">
+    <div class="app-header text-center">
+      <h3><i class="bi bi-wallet2"></i> Expense Tracker</h3>
+    </div>
+
+    <div class="text-center my-3">
+      <button class="btn btn-primary send-btn me-2"><i class="bi bi-send-fill"></i>Send</button>
+      <button class="btn btn-success receive-btn"><i class="bi bi-cash-stack"></i>Receive</button>
+    </div>
+
+    <!-- Summary Card -->
+    <div class="card balance-card p-3 shadow-sm">
+      <h5 class="text-center">Balance: <span id="balance">$0.00</span></h5>
+      <div class="d-flex justify-content-around mt-2">
+        <div class="text-success">Income: <span id="income">$0.00</span></div>
+        <div class="text-danger">Expense: <span id="expense">$0.00</span></div>
+      </div>
+    </div>
+
+    <!-- Add Transaction Form -->
+    <div class="card form-card p-3 shadow-sm">
+      <form id="form">
+        <input type="text" id="text" class="form-control mb-2" placeholder="Enter description" required />
+        <input type="number" id="amount" class="form-control mb-2" placeholder="Amount (+/-)" required />
+        <select id="category" class="form-select mb-2">
+          <option value="General">General</option>
+          <option value="Food">Food</option>
+          <option value="Shopping">Shopping</option>
+          <option value="Transport">Transport</option>
+          <option value="Salary">Salary</option>
+        </select>
+        <button class="btn btn-primary w-100">Add</button>
+      </form>
+    </div>
+
+    <!-- Transaction List -->
+    <div class="card history-card p-3 shadow-sm">
+      <h6>Recent Transactions</h6>
+      <ul id="list" class="list-group mt-2"></ul>
+    </div>
+
+    <!-- Pie Chart -->
+    <div class="card chart-card shadow-sm">
+      <h6 class="text-center">Spending Breakdown</h6>
+      <canvas id="chart" height="120"></canvas>
+    </div>
+  </div>
+
+  <!-- AI Assistant -->
+  <div id="ai-widget" class="position-fixed bottom-0 end-0 m-3">
+    <button class="btn btn-dark rounded-circle shadow" id="toggleChat" title="Ask AI">🤖</button>
+    <div class="card shadow-lg mt-2 d-none" id="chatBox" style="width: 300px;">
+      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span>AI Assistant</span>
+        <button class="btn btn-sm btn-light" id="closeChat">×</button>
+      </div>
+      <div class="card-body" id="chatBody" style="max-height: 300px; overflow-y: auto; font-size: 0.9rem;"></div>
+      <div class="card-footer p-2">
+        <input type="text" id="userInput" class="form-control form-control-sm" placeholder="Ask me anything..." />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const balance = document.getElementById('balance');
+    const incomeDisplay = document.getElementById('income');
+    const expenseDisplay = document.getElementById('expense');
+    const list = document.getElementById('list');
+    const form = document.getElementById('form');
+    const text = document.getElementById('text');
+    const amount = document.getElementById('amount');
+    const category = document.getElementById('category');
+
+    let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const transaction = {
+        id: Date.now(),
+        text: text.value,
+        amount: +amount.value,
+        category: category.value
+      };
+      transactions.push(transaction);
+      update();
+      form.reset();
+    });
+
+    document.querySelector('.send-btn').addEventListener('click', () => {
+      const reason = prompt("Enter reason for sending:");
+      const amt = prompt("Enter amount to send:");
+      if (!reason || isNaN(amt)) return;
+      const transaction = {
+        id: Date.now(),
+        text: reason,
+        amount: -Math.abs(+amt),
+        category: "Send"
+      };
+      transactions.push(transaction);
+      update();
+    });
+
+    document.querySelector('.receive-btn').addEventListener('click', () => {
+      const source = prompt("Enter source of income:");
+      const amt = prompt("Enter amount to receive:");
+      if (!source || isNaN(amt)) return;
+      const transaction = {
+        id: Date.now(),
+        text: source,
+        amount: +Math.abs(+amt),
+        category: "Receive"
+      };
+      transactions.push(transaction);
+      update();
+    });
+
+    function update() {
+      localStorage.setItem('transactions', JSON.stringify(transactions));
+      render();
+    }
+
+    function render() {
+      list.innerHTML = '';
+      let income = 0, expense = 0;
+      const categoryMap = {};
+
+      transactions.forEach(t => {
+        const sign = t.amount < 0 ? '-' : '+';
+        const item = document.createElement('li');
+        item.classList.add('list-group-item', 'd-flex', 'justify-content-between', t.amount < 0 ? 'expense' : 'income');
+        item.innerHTML = `${t.text} (${t.category}) <span>${sign}$${Math.abs(t.amount)}</span>`;
+        list.appendChild(item);
+
+        if (t.amount >= 0) income += t.amount;
+        else expense += t.amount;
+
+        categoryMap[t.category] = (categoryMap[t.category] || 0) + Math.abs(t.amount);
+      });
+
+      balance.innerText = `$${(income + expense).toFixed(2)}`;
+      incomeDisplay.innerText = `$${income.toFixed(2)}`;
+      expenseDisplay.innerText = `$${Math.abs(expense).toFixed(2)}`;
+      drawChart(categoryMap);
+    }
+
+    let chart;
+    function drawChart(data) {
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(data),
+          datasets: [{
+            label: 'Category',
+            data: Object.values(data),
+            backgroundColor: ['#5f259f', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1']
+          }]
+        },
+        options: {
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    // AI Chat Logic
+    const toggleChat = document.getElementById('toggleChat');
+    const chatBox = document.getElementById('chatBox');
+    const closeChat = document.getElementById('closeChat');
+    const userInput = document.getElementById('userInput');
+    const chatBody = document.getElementById('chatBody');
+
+    toggleChat.onclick = () => chatBox.classList.toggle('d-none');
+    closeChat.onclick = () => chatBox.classList.add('d-none');
+
+    userInput.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') {
+        const input = userInput.value.trim();
+        if (!input) return;
+        appendMessage("You", input);
+        respondAI(input);
+        userInput.value = '';
+      }
+    });
+
+    function appendMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = `mb-2`;
+      msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+      chatBody.appendChild(msg);
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }
+
+    function respondAI(message) {
+      let reply = "Let me think...";
+      if (message.toLowerCase().includes("balance")) {
+        reply = balance.innerText;
+      } else if (message.toLowerCase().includes("spending") || message.toLowerCase().includes("expense")) {
+        reply = `You've spent ${expenseDisplay.innerText} so far.`;
+      } else if (message.toLowerCase().includes("income")) {
+        reply = `You've earned ${incomeDisplay.innerText}.`;
+      } else {
+        reply = "I'm here to help you track and manage your expenses. Try asking about 'income', 'expense', or 'balance'.";
+      }
+      setTimeout(() => appendMessage("AI", reply), 800);
+    }
+
+    update();
+  </script>
+</body>
+</html>
